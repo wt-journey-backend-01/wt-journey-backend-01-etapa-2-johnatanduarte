@@ -1,25 +1,58 @@
-// controllers/agentesController.js
-
 // Importa o repositório de agentes que lida com o acesso aos dados.
 const agentesRepository = require("../repositories/agentesRepository");
+// Importa a biblioteca Zod para validação de esquemas.
+const { z } = require("zod");
+
+/**
+ * Define o esquema de validação para um agente usando Zod.
+ */
+const agenteSchema = z.object({
+  nome: z
+    .string({
+      required_error: "O campo 'nome' é obrigatório.",
+      invalid_type_error: "O campo 'nome' deve ser uma string.",
+    })
+    .min(1, { message: "O campo 'nome' não pode estar vazio." }),
+
+  dataDeIncorporacao: z
+    .string({ required_error: "O campo 'dataDeIncorporacao' é obrigatório." })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, {
+      message: "O campo 'dataDeIncorporacao' deve estar no formato YYYY-MM-DD.",
+    })
+    .refine(
+      (dateString) => {
+        const dataIncorporacao = new Date(dateString);
+        const dataUTC = new Date(
+          dataIncorporacao.getUTCFullYear(),
+          dataIncorporacao.getUTCMonth(),
+          dataIncorporacao.getUTCDate()
+        );
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        return dataUTC <= hoje;
+      },
+      { message: "A data de incorporação não pode ser uma data futura." }
+    ),
+
+  cargo: z
+    .string({
+      required_error: "O campo 'cargo' é obrigatório.",
+    })
+    .min(1, { message: "O campo 'cargo' não pode estar vazio." }),
+});
 
 /**
  * Controlador para gerenciar as requisições relacionadas a Agentes.
- * A responsabilidade dele é receber a requisição, chamar a camada de repositório
- * e retornar uma resposta.
  */
 
-// Função para lidar com a requisição GET para listar todos os agentes.
 function getAllAgentes(req, res) {
   const todosAgentes = agentesRepository.findAll();
   res.status(200).json(todosAgentes);
 }
 
-// Função para lidar com a requisição GET para buscar um agente por ID.
 function getAgenteById(req, res) {
   const id = req.params.id;
   const agente = agentesRepository.findById(id);
-
   if (agente) {
     res.status(200).json(agente);
   } else {
@@ -27,68 +60,104 @@ function getAgenteById(req, res) {
   }
 }
 
-// Função para lidar com a requisição POST para criar um novo agente.
 function createAgente(req, res) {
-  const novoAgenteData = req.body;
-  if (
-    !novoAgenteData.nome ||
-    !novoAgenteData.dataDeIncorporacao ||
-    !novoAgenteData.cargo
-  ) {
-    return res
-      .status(400)
-      .json({
-        message:
-          "Dados inválidos. Nome, data de incorporação e cargo são obrigatórios.",
-      });
+  try {
+    const novoAgenteData = agenteSchema.parse(req.body);
+    const agenteCriado = agentesRepository.create(novoAgenteData);
+    res.status(201).json(agenteCriado);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        campo: err.path.join("."),
+        mensagem: err.message,
+      }));
+      return res
+        .status(400)
+        .json({ message: "Parâmetros inválidos", errors: errors });
+    }
+    res.status(500).json({ message: "Erro interno do servidor." });
   }
-  const agenteCriado = agentesRepository.create(novoAgenteData);
-  res.status(201).json(agenteCriado);
 }
 
-// Função para lidar com a requisição PUT para atualizar um agente.
 function updateAgente(req, res) {
-  const id = req.params.id;
-  const agenteData = req.body;
+  try {
+    // **NOVA VALIDAÇÃO**: Impede que o ID seja enviado no corpo da requisição.
+    if (req.body.id) {
+      return res
+        .status(400)
+        .json({ message: "Não é permitido alterar o ID de um recurso." });
+    }
 
-  if (!agenteData.nome || !agenteData.dataDeIncorporacao || !agenteData.cargo) {
-    return res
-      .status(400)
-      .json({
-        message:
-          "Dados inválidos. Nome, data de incorporação e cargo são obrigatórios.",
-      });
-  }
+    const agenteData = agenteSchema.parse(req.body);
+    const id = req.params.id;
 
-  const agenteAtualizado = agentesRepository.update(id, agenteData);
-
-  if (agenteAtualizado) {
-    res.status(200).json(agenteAtualizado);
-  } else {
-    res.status(404).json({ message: "Agente não encontrado." });
+    const agenteAtualizado = agentesRepository.update(id, agenteData);
+    if (agenteAtualizado) {
+      res.status(200).json(agenteAtualizado);
+    } else {
+      res.status(404).json({ message: "Agente não encontrado." });
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        campo: err.path.join("."),
+        mensagem: err.message,
+      }));
+      return res
+        .status(400)
+        .json({ message: "Parâmetros inválidos", errors: errors });
+    }
+    res.status(500).json({ message: "Erro interno do servidor." });
   }
 }
 
-// Função para lidar com a requisição DELETE para remover um agente.
+function patchAgente(req, res) {
+  try {
+    // **NOVA VALIDAÇÃO**: Impede que o ID seja enviado no corpo da requisição.
+    if (req.body.id) {
+      return res
+        .status(400)
+        .json({ message: "Não é permitido alterar o ID de um recurso." });
+    }
+
+    const agenteData = agenteSchema.partial().parse(req.body);
+    const id = req.params.id;
+
+    const agenteAtualizado = agentesRepository.update(id, agenteData);
+    if (agenteAtualizado) {
+      res.status(200).json(agenteAtualizado);
+    } else {
+      res.status(404).json({ message: "Agente não encontrado." });
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        campo: err.path.join("."),
+        mensagem: err.message,
+      }));
+      return res
+        .status(400)
+        .json({ message: "Parâmetros inválidos", errors: errors });
+    }
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+}
+
 function deleteAgente(req, res) {
   const id = req.params.id;
-  // Tenta remover o agente pelo ID.
   const sucesso = agentesRepository.remove(id);
-
   if (sucesso) {
-    // Se a remoção foi bem-sucedida, retorna status 204 sem corpo.
     res.status(204).send();
   } else {
-    // Se o agente não foi encontrado, retorna status 404.
     res.status(404).json({ message: "Agente não encontrado." });
   }
 }
 
-// Exporta as funções para que possam ser usadas nas rotas.
 module.exports = {
   getAllAgentes,
   getAgenteById,
   createAgente,
   updateAgente,
+  patchAgente,
   deleteAgente,
 };

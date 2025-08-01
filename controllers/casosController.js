@@ -1,5 +1,20 @@
-// Importa o repositório de casos.
+// Importa o repositório de casos e o Zod.
 const casosRepository = require("../repositories/casosRepository");
+const { z } = require("zod");
+
+// Esquema de validação para Casos.
+const casoSchema = z.object({
+  titulo: z.string({ required_error: "O campo 'titulo' é obrigatório." }),
+  descricao: z.string({ required_error: "O campo 'descricao' é obrigatório." }),
+  status: z.enum(["aberto", "solucionado"], {
+    errorMap: () => ({
+      message: "O status deve ser 'aberto' ou 'solucionado'.",
+    }),
+  }),
+  agente_id: z
+    .string({ required_error: "O campo 'agente_id' é obrigatório." })
+    .uuid({ message: "O 'agente_id' deve ser um UUID válido." }),
+});
 
 /**
  * Controlador para gerenciar as requisições relacionadas a Casos.
@@ -32,110 +47,102 @@ function getCasoById(req, res) {
 
 // Função para lidar com a requisição POST para criar um novo caso.
 function createCaso(req, res) {
-  // Pega os dados do novo caso do corpo da requisição.
-  const novoCasoData = req.body;
-
-  // Validação dos campos obrigatórios.
-  if (
-    !novoCasoData.titulo ||
-    !novoCasoData.descricao ||
-    !novoCasoData.status ||
-    !novoCasoData.agente_id
-  ) {
-    return res.status(400).json({
-      message:
-        "Dados inválidos. Título, descrição, status e agente_id são obrigatórios.",
-    });
+  try {
+    const novoCasoData = casoSchema.parse(req.body);
+    const casoCriado = casosRepository.create(novoCasoData);
+    res.status(201).json(casoCriado);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        campo: err.path.join("."),
+        mensagem: err.message,
+      }));
+      return res
+        .status(400)
+        .json({ message: "Parâmetros inválidos", errors: errors });
+    }
+    res.status(500).json({ message: "Erro interno do servidor." });
   }
-
-  // Validação específica para o campo 'status'.
-  if (
-    novoCasoData.status !== "aberto" &&
-    novoCasoData.status !== "solucionado"
-  ) {
-    return res.status(400).json({
-      message: "Status inválido. O status deve ser 'aberto' ou 'solucionado'.",
-    });
-  }
-
-  // Chama a função create do repositório.
-  const casoCriado = casosRepository.create(novoCasoData);
-
-  // Retorna o caso criado com o status 201 (Created).
-  res.status(201).json(casoCriado);
 }
 
 // Função para lidar com a requisição PUT para atualizar um caso por completo.
 function updateCaso(req, res) {
-  const id = req.params.id;
-  const casoData = req.body;
+  try {
+    // **NOVA VALIDAÇÃO**: Impede que o ID seja enviado no corpo da requisição.
+    if (req.body.id) {
+      return res
+        .status(400)
+        .json({ message: "Não é permitido alterar o ID de um recurso." });
+    }
 
-  // Validação para garantir que todos os campos foram enviados para a substituição.
-  if (
-    !casoData.titulo ||
-    !casoData.descricao ||
-    !casoData.status ||
-    !casoData.agente_id
-  ) {
-    return res.status(400).json({
-      message:
-        "Dados inválidos. Para o método PUT, todos os campos são obrigatórios: título, descrição, status e agente_id.",
-    });
-  }
-  if (casoData.status !== "aberto" && casoData.status !== "solucionado") {
-    return res.status(400).json({
-      message: "Status inválido. O status deve ser 'aberto' ou 'solucionado'.",
-    });
-  }
+    const casoData = casoSchema.parse(req.body);
+    const id = req.params.id;
 
-  const casoAtualizado = casosRepository.update(id, casoData);
-  if (casoAtualizado) {
-    res.status(200).json(casoAtualizado);
-  } else {
-    res.status(404).json({ message: "Caso não encontrado." });
+    const casoAtualizado = casosRepository.update(id, casoData);
+    if (casoAtualizado) {
+      res.status(200).json(casoAtualizado);
+    } else {
+      res.status(404).json({ message: "Caso não encontrado." });
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        campo: err.path.join("."),
+        mensagem: err.message,
+      }));
+      return res
+        .status(400)
+        .json({ message: "Parâmetros inválidos", errors: errors });
+    }
+    res.status(500).json({ message: "Erro interno do servidor." });
   }
 }
 
 // Função para lidar com a requisição PATCH para atualizar um caso parcialmente.
 function patchCaso(req, res) {
-  const id = req.params.id;
-  const casoData = req.body;
+  try {
+    // **NOVA VALIDAÇÃO**: Impede que o ID seja enviado no corpo da requisição.
+    if (req.body.id) {
+      return res
+        .status(400)
+        .json({ message: "Não é permitido alterar o ID de um recurso." });
+    }
 
-  // Validação específica para o campo 'status', caso ele tenha sido enviado.
-  if (
-    casoData.status &&
-    casoData.status !== "aberto" &&
-    casoData.status !== "solucionado"
-  ) {
-    return res.status(400).json({
-      message: "Status inválido. O status deve ser 'aberto' ou 'solucionado'.",
-    });
-  }
+    const casoData = casoSchema.partial().parse(req.body);
+    const id = req.params.id;
 
-  const casoAtualizado = casosRepository.update(id, casoData);
-  if (casoAtualizado) {
-    res.status(200).json(casoAtualizado);
-  } else {
-    res.status(404).json({ message: "Caso não encontrado." });
+    const casoAtualizado = casosRepository.update(id, casoData);
+    if (casoAtualizado) {
+      res.status(200).json(casoAtualizado);
+    } else {
+      res.status(404).json({ message: "Caso não encontrado." });
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        campo: err.path.join("."),
+        mensagem: err.message,
+      }));
+      return res
+        .status(400)
+        .json({ message: "Parâmetros inválidos", errors: errors });
+    }
+    res.status(500).json({ message: "Erro interno do servidor." });
   }
 }
 
-// Função para lidar com a requisição DELETE para remover um caso.
+// ... (função deleteCaso - sem alteração)
 function deleteCaso(req, res) {
   const id = req.params.id;
-  // Tenta remover o caso pelo ID.
   const sucesso = casosRepository.remove(id);
-
   if (sucesso) {
-    // Se a remoção foi bem-sucedida, retorna status 204 sem corpo.
     res.status(204).send();
   } else {
-    // Se o caso não foi encontrado, retorna status 404.
     res.status(404).json({ message: "Caso não encontrado." });
   }
 }
 
-// Exporta a função para que ela possa ser usada nas rotas.
+// Exporta as funções para que possam ser usadas nas rotas.
 module.exports = {
   getAllCasos,
   getCasoById,

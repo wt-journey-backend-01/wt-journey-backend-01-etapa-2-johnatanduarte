@@ -24,6 +24,9 @@ router.post("/agentes", agentesController.createAgente);
 // Rota para atualizar um agente existente.
 router.put("/agentes/:id", agentesController.updateAgente);
 
+// Rota para atualizar parcialmente um agente.
+router.patch("/agentes/:id", agentesController.patchAgente);
+
 // Rota para remover um agente.
 router.delete("/agentes/:id", agentesController.deleteAgente);
 
