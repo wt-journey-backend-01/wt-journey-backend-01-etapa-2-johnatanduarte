@@ -4,323 +4,183 @@ Você tem 9 créditos restantes para usar o sistema de feedback AI.
 
 # Feedback para johnatanduarte:
 
-Nota final: **67.6/100**
+Nota final: **66.7/100**
 
-Olá, johnatanduarte! 👋🚀
+Olá, johnatanduarte! 👋🚓
 
-Primeiro, parabéns pelo esforço e pela entrega da sua API para o Departamento de Polícia! 🎉 Você estruturou muito bem seu projeto, dividindo rotas, controllers e repositories, e implementou os principais endpoints para os recursos `/agentes` e `/casos`. Isso é essencial para uma API RESTful organizada e escalável. Além disso, vi que você conseguiu implementar as operações básicas de CRUD para ambos os recursos, com validação inicial e tratamento de erros — muito bom! 👏
-
-Também quero destacar que você avançou na implementação de funcionalidades bônus, como filtros e ordenação, e tentou personalizar mensagens de erro. Isso mostra que você está buscando ir além do básico, o que é fantástico! 🌟
+Primeiramente, parabéns pelo esforço e pelo que você já conseguiu entregar nesta API para o Departamento de Polícia! 🎉 Você estruturou muito bem o projeto, com pastas claras, controllers, repositories, rotas e até a documentação com Swagger integrada. Isso mostra maturidade e organização no seu código, o que é fundamental para projetos reais. Além disso, você implementou corretamente os endpoints básicos para os recursos `/agentes` e `/casos`, com os métodos HTTP essenciais (GET, POST, PUT, PATCH, DELETE). Muito bom! 👏
 
 ---
 
-### Agora, vamos analisar alguns pontos importantes para você evoluir ainda mais. Vou te mostrar o que observei e como podemos melhorar juntos! 🕵️‍♂️🔍
+## O que está funcionando muito bem 👍
+
+- **Arquitetura modular:** Separar rotas, controllers e repositories está perfeito e facilita a manutenção e escalabilidade do projeto.
+- **Validação com Zod:** Você usou o Zod para validar os dados recebidos, o que é uma ótima prática para garantir a integridade dos dados.
+- **Tratamento de erros:** Está retornando status codes corretos como 400 para erros de validação, 404 para recursos não encontrados e 201 para criação.
+- **Uso correto do Express Router:** As rotas estão bem definidas em arquivos separados e importadas no `server.js`.
+- **Documentação Swagger:** A integração da documentação interativa está no lugar, o que é um diferencial para APIs.
+- **Bônus conquistados:** Apesar de não ter implementado os filtros e ordenações mais complexos, você avançou na filtragem simples e na customização das mensagens de erro, mostrando que está indo além do básico.
 
 ---
 
-## 1. Atualização parcial de agentes com PATCH não funciona corretamente
+## Pontos para melhorar e o que eu percebi no seu código 🕵️‍♂️
 
-Você tem os métodos PUT e DELETE para agentes funcionando bem, e até o PATCH para casos está implementado. Porém, notei que o PATCH para agentes não está implementado, e isso está causando falhas.
+### 1. Validação de campos obrigatórios em **Casos** (título e descrição não podem estar vazios)
 
-No seu arquivo `routes/agentesRoutes.js`, não há nenhuma rota que trate o método PATCH para `/agentes/:id`. Olha só:
+No seu schema do `casosController.js`, você declarou assim:
 
 ```js
-// routes/agentesRoutes.js
-// Não existe algo como:
-router.patch("/agentes/:id", agentesController.patchAgente);
+const casoSchema = z.object({
+  titulo: z.string({ required_error: "O campo 'titulo' é obrigatório." }),
+  descricao: z.string({ required_error: "O campo 'descricao' é obrigatório." }),
+  // ...
+});
 ```
 
-E no seu `controllers/agentesController.js`, também não há função `patchAgente`. Isso explica por que as requisições PATCH para agentes falham: o endpoint simplesmente não existe.
+Aqui, você só está garantindo que os campos `titulo` e `descricao` sejam strings, mas não está impedindo que sejam strings vazias (`""`). Por isso, seu sistema aceita criar casos com título ou descrição vazios, o que não faz sentido para um caso policial.
 
----
-
-**Por que isso é importante?**
-
-O método PATCH é usado para atualizações parciais, ou seja, você pode enviar só alguns campos para modificar, diferente do PUT que exige todos os campos. Como você já implementou o PUT para agentes, o PATCH seria a próxima etapa natural para completar o CRUD.
-
----
-
-**Como corrigir?**
-
-1. No arquivo `routes/agentesRoutes.js`, adicione a rota PATCH:
+**Como corrigir?** Use o método `.min(1)` para garantir que a string tenha pelo menos um caractere:
 
 ```js
-router.patch("/agentes/:id", agentesController.patchAgente);
+const casoSchema = z.object({
+  titulo: z.string({ required_error: "O campo 'titulo' é obrigatório." }).min(1, { message: "O campo 'titulo' não pode estar vazio." }),
+  descricao: z.string({ required_error: "O campo 'descricao' é obrigatório." }).min(1, { message: "O campo 'descricao' não pode estar vazio." }),
+  // ...
+});
 ```
 
-2. No `controllers/agentesController.js`, crie a função `patchAgente`, que deve:
+Isso vai fazer o Zod rejeitar payloads com campos vazios, retornando erro 400 corretamente.
 
-- Validar o corpo da requisição, permitindo campos opcionais.
-- Garantir que o campo `id` não seja alterado.
-- Atualizar o agente parcialmente usando o `agentesRepository.update` (ou crie um método específico para atualização parcial).
-- Retornar status 200 com o agente atualizado ou 404 se não encontrado.
-- Retornar 400 para payload inválido.
+**Recurso recomendado:**  
+Para entender melhor como funciona essa validação e o tratamento de erros 400, veja este vídeo que explica validação de dados em APIs Node.js/Express:  
+🔗 https://youtu.be/yNDCRAz7CM8?si=Lh5u3j27j_a4w3A_
 
-Exemplo básico:
+---
+
+### 2. Validação do `agente_id` no payload de criação de casos
+
+Você está validando se o `agente_id` é um UUID válido, o que é ótimo:
 
 ```js
-function patchAgente(req, res) {
-  const id = req.params.id;
-  const agenteData = req.body;
+agente_id: z
+  .string({ required_error: "O campo 'agente_id' é obrigatório." })
+  .uuid({ message: "O 'agente_id' deve ser um UUID válido." }),
+```
 
-  // Impede alteração do ID
-  if (agenteData.id && agenteData.id !== id) {
-    return res.status(400).json({ message: "Não é permitido alterar o ID do agente." });
+Porém, não vi no seu código nenhuma validação para garantir que esse `agente_id` realmente exista no seu repositório de agentes. Isso é importante para evitar que se crie um caso para um agente que não está cadastrado.
+
+**Por que isso é importante?**  
+Se você não verificar, pode criar casos com agentes inexistentes, o que compromete a integridade dos dados.
+
+**Como corrigir?**  
+No método `createCaso` do `casosController.js`, após validar o payload com Zod, você deve checar se o agente existe:
+
+```js
+function createCaso(req, res) {
+  try {
+    const novoCasoData = casoSchema.parse(req.body);
+
+    // Verifica se o agente existe
+    const agenteExiste = agentesRepository.findById(novoCasoData.agente_id);
+    if (!agenteExiste) {
+      return res.status(404).json({ message: "Agente não encontrado para o agente_id fornecido." });
+    }
+
+    const casoCriado = casosRepository.create(novoCasoData);
+    res.status(201).json(casoCriado);
+  } catch (error) {
+    // resto do código...
   }
-
-  // Validação básica: pelo menos um campo válido deve ser enviado
-  const camposValidos = ["nome", "dataDeIncorporacao", "cargo"];
-  const camposEnviados = Object.keys(agenteData);
-  const temCampoValido = camposEnviados.some((campo) => camposValidos.includes(campo));
-
-  if (!temCampoValido) {
-    return res.status(400).json({ message: "Nenhum campo válido para atualização foi enviado." });
-  }
-
-  const agenteAtualizado = agentesRepository.update(id, agenteData);
-
-  if (agenteAtualizado) {
-    res.status(200).json(agenteAtualizado);
-  } else {
-    res.status(404).json({ message: "Agente não encontrado." });
-  }
 }
 ```
 
----
-
-**Recursos para aprender mais:**
-
-- [Documentação oficial do Express sobre rotas e métodos HTTP](https://expressjs.com/pt-br/guide/routing.html)
-- [Vídeo sobre validação de dados em APIs Node.js/Express](https://youtu.be/yNDCRAz7CM8?si=Lh5u3j27j_a4w3A_)
-- [Explicação sobre métodos HTTP, incluindo PATCH](https://youtu.be/RSZHvQomeKE)
+**Recurso recomendado:**  
+Este artigo da MDN sobre status 404 explica quando e como usar:  
+🔗 https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Status/404
 
 ---
 
-## 2. Validação insuficiente da data de incorporação dos agentes
+### 3. Filtros e ordenação não implementados (bônus)
 
-Eu percebi que seu código permite que agentes sejam criados com datas de incorporação em formatos inválidos ou até mesmo datas futuras, o que não faz sentido para o contexto.
+Percebi que os testes de filtragem simples e complexa, ordenação e busca por keywords não passaram. Isso indica que esses recursos ainda não foram implementados.
 
-No seu `controllers/agentesController.js`, a validação atual é apenas:
+Para destravar esses bônus, você precisará:
 
-```js
-if (
-  !novoAgenteData.nome ||
-  !novoAgenteData.dataDeIncorporacao ||
-  !novoAgenteData.cargo
-) {
-  return res.status(400).json({ message: "..." });
-}
-```
+- Receber parâmetros via query string (`req.query`) nas rotas GET, por exemplo: `/casos?status=aberto&agente_id=...`
+- Filtrar os arrays em memória usando métodos como `.filter()`
+- Implementar ordenação com `.sort()` para agentes por data de incorporação
+- Retornar os dados filtrados e ordenados corretamente no controller
 
-Mas não há validação para o formato da data nem para impedir datas futuras.
+**Dica:** Comece implementando filtros simples em `getAllCasos` e `getAllAgentes`, lendo os parâmetros do `req.query` e filtrando os arrays.
 
----
+**Recurso recomendado:**  
+Este vídeo explica como manipular query params e filtrar dados no Express:  
+🔗 https://youtu.be/--TQwiNIw28
 
-**Por que isso é importante?**
-
-Garantir que a data esteja no formato correto (ex: `YYYY-MM-DD`) e que não seja uma data futura evita dados incorretos e inconsistentes no sistema.
+E este vídeo ensina a organizar seu projeto com arquitetura MVC (controllers, routes, repositories), fundamental para implementar esses filtros de forma limpa:  
+🔗 https://youtu.be/bGN_xNc4A1k?si=Nj38J_8RpgsdQ-QH
 
 ---
 
-**Como melhorar?**
+### 4. Penalidade detectada: Permitir criação de casos com título e descrição vazios
 
-Você pode usar uma biblioteca como o [Zod](https://github.com/colinhacks/zod), que já está nas suas dependências, para validar o formato da data, ou usar uma validação manual com regex e `Date`.
-
-Exemplo simples para validar data no formato `YYYY-MM-DD` e impedir datas futuras:
-
-```js
-function isValidDate(dateString) {
-  // Verifica o formato YYYY-MM-DD
-  const regex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!regex.test(dateString)) return false;
-
-  const data = new Date(dateString);
-  const hoje = new Date();
-
-  if (isNaN(data.getTime())) return false; // Data inválida
-  if (data > hoje) return false; // Data futura
-
-  return true;
-}
-
-// No createAgente e updateAgente:
-if (!isValidDate(novoAgenteData.dataDeIncorporacao)) {
-  return res.status(400).json({ message: "Data de incorporação inválida ou futura." });
-}
-```
+Esse problema já foi explicado no item 1, mas vale reforçar que a validação correta dos campos obrigatórios é fundamental para evitar dados inconsistentes.
 
 ---
 
-**Recursos para aprender mais:**
+### 5. Estrutura de diretórios está adequada! 👏
 
-- [Validação de dados com Zod](https://youtu.be/yNDCRAz7CM8?si=Lh5u3j27j_a4w3A_)
-- [Status 400 para dados inválidos - MDN](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Status/400)
-
----
-
-## 3. Permite alteração do ID de agentes e casos via PUT (não deve permitir)
-
-Quando você implementa o método PUT para atualizar um recurso, o ID do recurso não deve ser alterado. Porém, eu vi que no seu `agentesRepository.js` e `casosRepository.js`, você simplesmente substitui o objeto, usando o spread operator, sem impedir que o campo `id` seja alterado.
-
-Exemplo no `agentesRepository.js`:
-
-```js
-const agenteAtualizado = {
-  id: id,
-  ...agenteData,
-};
-```
-
-Aqui, você força o `id` correto, o que é bom, mas no controller não há validação para impedir que o cliente envie um `id` diferente no payload.
-
-Já no `casosRepository.js`, no método `update`, você faz:
-
-```js
-const casoAtualizado = {
-  ...casoExistente,
-  ...casoData,
-  id: id,
-};
-```
-
-Então o ID é mantido, o que está certo. Porém na camada de controller, não há verificação para impedir que o cliente tente alterar o ID enviando um campo `id` diferente.
-
----
-
-**Por que isso é importante?**
-
-Permitir que o cliente altere o ID pode causar inconsistências e problemas de integridade dos dados.
-
----
-
-**Como corrigir?**
-
-No controller, antes de chamar o update, verifique se o `id` enviado no corpo (se existir) é igual ao `id` da URL, e retorne erro 400 caso contrário.
-
-Exemplo para agentes:
-
-```js
-if (agenteData.id && agenteData.id !== id) {
-  return res.status(400).json({ message: "Não é permitido alterar o ID do agente." });
-}
-```
-
-Faça o mesmo para casos.
-
----
-
-## 4. Permite criar casos com `agente_id` inválido ou inexistente
-
-Na criação de casos (`createCaso`), você valida os campos obrigatórios, mas não verifica se o `agente_id` informado realmente existe na lista de agentes.
-
-Isso pode causar casos vinculados a agentes que não existem, prejudicando a integridade dos dados.
-
----
-
-**Como resolver?**
-
-No `controllers/casosController.js`, dentro da função `createCaso`, antes de criar o caso, faça uma verificação consultando o `agentesRepository` para garantir que o agente existe:
-
-```js
-const agenteExiste = agentesRepository.findById(novoCasoData.agente_id);
-if (!agenteExiste) {
-  return res.status(404).json({ message: "Agente não encontrado para o agente_id informado." });
-}
-```
-
-Faça o mesmo para os métodos PUT e PATCH que atualizam o campo `agente_id`.
-
----
-
-**Recursos para aprender mais:**
-
-- [Status 404 para recursos não encontrados - MDN](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Status/404)
-- [Validação de dados em APIs Node.js](https://youtu.be/yNDCRAz7CM8?si=Lh5u3j27j_a4w3A_)
-
----
-
-## 5. Organização e estrutura de arquivos
-
-Sua estrutura está muito próxima do esperado, mas notei que:
-
-- O `.gitignore` não contém a pasta `node_modules`, o que pode causar problemas ao versionar dependências desnecessárias.
-- Alguns arquivos extras ou pastas não estão exatamente na estrutura predefinida, como a ausência da pasta `docs/` com o Swagger e o arquivo `.env` (que é opcional, mas recomendado).
-
-Manter a estrutura conforme o padrão ajuda muito na manutenção e clareza do projeto, além de ser um requisito do desafio.
-
----
-
-**Como melhorar?**
-
-- Adicione `node_modules/` no seu `.gitignore`
-- Organize o projeto conforme o padrão abaixo:
+Seu projeto está organizado exatamente como esperado:
 
 ```
-📦 SEU-REPOSITÓRIO
-│
-├── package.json
-├── server.js
-├── .env (opcional)
-│
-├── routes/
-│   ├── agentesRoutes.js
-│   └── casosRoutes.js
-│
+.
 ├── controllers/
-│   ├── agentesController.js
-│   └── casosController.js
-│
 ├── repositories/
-│   ├── agentesRepository.js
-│   └── casosRepository.js
-│
+├── routes/
 ├── docs/
-│   └── swagger.js
-│
+├── server.js
+├── package.json
 └── utils/
-    └── errorHandler.js
 ```
 
----
-
-## 6. Sobre os filtros e mensagens de erro customizadas (Bônus)
-
-Você tentou implementar filtros, ordenação e mensagens personalizadas, o que é ótimo! Porém, percebi que esses recursos ainda não estão funcionando corretamente, pois os endpoints ou as validações específicas não estão totalmente implementados.
-
-Isso indica que você está no caminho certo, mas precisa revisar a implementação desses recursos para garantir que eles funcionem conforme esperado.
+Isso é ótimo para manter o código limpo e escalável. Continue assim! 🚀
 
 ---
 
-### Resumo rápido dos principais pontos para focar:
+## Dicas extras para você continuar evoluindo ✨
 
-- ✅ Implementar o endpoint PATCH para agentes e sua respectiva função no controller.
-- ✅ Validar corretamente a data de incorporação para agentes (formato e não ser futura).
-- ✅ Impedir alteração do campo `id` nos métodos PUT e PATCH para agentes e casos.
-- ✅ Validar se o `agente_id` informado em casos realmente existe antes de criar ou atualizar casos.
-- ✅ Ajustar a estrutura do projeto para seguir o padrão esperado, incluindo `.gitignore` com `node_modules`.
-- ✅ Revisar e finalizar a implementação dos filtros e mensagens de erro customizadas para os bônus.
+- Sempre que validar dados, pense não só no formato (tipo e presença), mas também no conteúdo (ex: strings vazias, datas futuras, IDs inexistentes).
+- Para melhorar a experiência do usuário da sua API, crie mensagens de erro claras e específicas, como você já vem fazendo com o Zod.
+- Explore os métodos de array do JavaScript para manipular dados em memória: `filter`, `map`, `find`, `sort`, etc.
+- Teste suas rotas manualmente com ferramentas como Postman ou Insomnia para garantir o comportamento esperado antes de automatizar os testes.
 
 ---
 
-### Finalizando...
+## Resumo rápido para focar:
 
-johnatanduarte, você está no caminho certo! Seu código já está muito organizado e com boa parte da lógica implementada. Agora, com essas melhorias, sua API vai ficar ainda mais robusta e profissional. 💪✨
-
-Continue praticando e explorando as validações e boas práticas que garantem a qualidade da sua aplicação. Se quiser, dê uma olhada nos recursos que deixei para você, eles vão ajudar bastante a solidificar esses conceitos.
-
-Qualquer dúvida, estou aqui para ajudar! 🚀👨‍💻
+- ✅ Corrija o schema de validação do `casoSchema` para impedir strings vazias em `titulo` e `descricao` usando `.min(1)`.
+- ✅ No controlador de casos, valide se o `agente_id` existe no repositório antes de criar um novo caso.
+- ✅ Implemente filtros e ordenações nos endpoints GET usando parâmetros de query (`req.query`) para os bônus.
+- ✅ Continue usando o Zod para validações e mantenha o tratamento de erros consistente.
+- ✅ Mantenha a organização modular do projeto, que está excelente!
 
 ---
 
-**Recursos recomendados para seu próximo passo:**
+johnatanduarte, você está no caminho certo e já entregou uma base sólida para essa API! Com esses ajustes, sua aplicação vai ficar ainda mais robusta e profissional. Continue explorando, testando e aprimorando! 🚀💪
 
-- [Express.js Routing - Documentação Oficial](https://expressjs.com/pt-br/guide/routing.html)
-- [Validação de dados em APIs Node.js com Zod](https://youtu.be/yNDCRAz7CM8?si=Lh5u3j27j_a4w3A_)
-- [Status HTTP 400 e 404 explicados - MDN](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Status)
-- [Arquitetura MVC para Node.js](https://youtu.be/bGN_xNc4A1k?si=Nj38J_8RpgsdQ-QH)
+Se precisar de ajuda para entender algum ponto específico, estou aqui para ajudar! 😉
 
-Grande abraço e continue codando! 🚀🎉
+---
+
+**Recursos para revisão rápida:**  
+- Validação com Zod: https://youtu.be/yNDCRAz7CM8?si=Lh5u3j27j_a4w3A_  
+- Manipulação de query params no Express: https://youtu.be/--TQwiNIw28  
+- Arquitetura MVC em Node.js: https://youtu.be/bGN_xNc4A1k?si=Nj38J_8RpgsdQ-QH  
+- Status HTTP 400 e 404:  
+  - https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Status/400  
+  - https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Status/404  
+
+Boa codificação e até a próxima revisão! 👨‍💻🔥
 
 > Caso queira tirar uma dúvida específica, entre em contato com o Chapter no nosso [discord](https://discord.gg/DryuHVnz).
 
